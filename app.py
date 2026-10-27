@@ -1,218 +1,54 @@
-
-import streamlit as st
-import numpy as np
-from PIL import Image, ImageOps, ImageDraw
-from tensorflow import keras
-
-st.set_page_config(
-    page_title="Handwritten Digit Recognition",
-    page_icon=None,
-    layout="wide"
-)
-
-st.markdown("""
-<style>
-.stApp {
-    background-color: #111827;
-    color: #f9fafb;
-}
-.block-container {
-    max-width: 1000px;
-    padding-top: 2rem;
-}
-h1, h2, h3 {
-    color: #c4b5fd;
-}
-.subtitle {
-    color: #9ca3af;
-    text-align: center;
-    font-size: 17px;
-}
-.stButton button {
-    background-color: #7c3aed;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    width: 100%;
-    min-height: 42px;
-    font-weight: 600;
-}
-.stButton button:hover {
-    background-color: #6d28d9;
-    color: white;
-}
-div[data-testid="stMetric"] {
-    background-color: #1f2937;
-    padding: 18px;
-    border-radius: 12px;
-}
-hr {
-    border-color: #374151;
-}
-</style>
-""", unsafe_allow_html=True)
+    # and input shape (batch, 28, 28, 1).
+    input_array = np.asarray(canvas, dtype=np.float32) / 255.0
+    input_array = input_array.reshape(1, 28, 28, 1)
+    return canvas, input_array
 
 
-@st.cache_resource
-def load_model():
-    return keras.models.load_model("digit_model.keras")
-
-
-def prepare_image(image):
-    image = ImageOps.exif_transpose(image).convert("L")
-    image_array = np.array(image)
-
-    if image_array.mean() > 127:
-        image_array = 255 - image_array
-
-    mask = image_array > 30
-
-    if not mask.any():
-        return None
-
-    rows, cols = np.where(mask)
-
-    digit = image_array[
-        rows.min():rows.max() + 1,
-        cols.min():cols.max() + 1
-    ]
-
-    digit = Image.fromarray(digit.astype("uint8"))
-    digit.thumbnail((20, 20))
-
-    canvas = Image.new("L", (28, 28), 0)
-
-    x = (28 - digit.width) // 2
-    y = (28 - digit.height) // 2
-
-    canvas.paste(digit, (x, y))
-
-    array = np.array(canvas).astype("float32") / 255.0
-
-    return array.reshape(1, 28, 28, 1)
-
-
-def predict_digit(image):
-    processed = prepare_image(image)
-
-    if processed is None:
-        st.warning("No digit detected. Please try again.")
-        return
-
-    model = load_model()
-    predictions = model.predict(processed, verbose=0)[0]
-
-    digit = int(np.argmax(predictions))
-    confidence = float(predictions[digit]) * 100
-
-    st.markdown("### Prediction Result")
-
-    col1, col2 = st.columns(2)
-    col1.metric("Predicted Digit", digit)
-    col2.metric("Confidence", f"{confidence:.2f}%")
-
-    st.write("Confidence for each digit")
-
-    for i, score in enumerate(predictions):
-        st.write(f"Digit {i}: {score * 100:.2f}%")
-        st.progress(float(score))
-
-
-st.markdown(
-    "<h1 style='text-align:center;'>Handwritten Digit Recognition</h1>",
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    "<p class='subtitle'>Recognize handwritten digits using a CNN model</p>",
-    unsafe_allow_html=True
-)
-
+st.markdown("<h1 style='text-align:center;'>Handwritten Digit Recognition</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;color:#9ca3af;'>Recognize one handwritten digit using a CNN model</p>", unsafe_allow_html=True)
 st.divider()
 
 try:
-    load_model()
-except Exception:
-    st.error(
-        "Unable to load digit_model.keras. "
-        "Check that the model file is uploaded."
-    )
+    model = load_model()
+except Exception as error:
+    st.error("Unable to load digit_model.keras. Make sure it is in the same folder as app.py.")
+    st.exception(error)
     st.stop()
 
+uploaded_file = st.file_uploader(
+    "Upload an image containing one digit (0–9)",
+    type=["png", "jpg", "jpeg"]
+)
 
-upload_tab, draw_tab = st.tabs(["Upload Image", "Draw Digit"])
-
-
-with upload_tab:
-    st.subheader("Upload a handwritten digit")
-
-    uploaded_file = st.file_uploader(
-        "Choose an image",
-        type=["png", "jpg", "jpeg"]
-    )
-
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Uploaded Image", width=250)
-
-        if st.button("Recognize Digit", key="upload_button"):
-            predict_digit(image)
-
-
-with draw_tab:
-    st.subheader("Draw a digit")
-
+if uploaded_file is not None:
     try:
-        from streamlit_drawable_canvas import st_canvas
+        original = Image.open(uploaded_file)
+        st.image(original, caption="Uploaded image", width=250)
 
-        canvas = st_canvas(
-            stroke_width=18,
-            stroke_color="#FFFFFF",
-            background_color="#000000",
-            height=280,
-            width=280,
-            drawing_mode="freedraw",
-            key="digit_canvas"
-        )
+        if st.button("Recognize Digit", type="primary"):
+            processed_image, input_data = prepare_image(original)
 
-        if st.button("Recognize Digit", key="draw_button"):
-            data = canvas.json_data
-
-            if data is None or not data.get("objects"):
-                st.warning("Please draw a digit first.")
+            if input_data is None:
+                st.warning("No digit was detected. Please upload a clearer image with one dark or bright digit.")
             else:
-                drawing = Image.new("RGB", (280, 280), "black")
-                pen = ImageDraw.Draw(drawing)
+                scores = model.predict(input_data, verbose=0)[0]
+                predicted_digit = int(np.argmax(scores))
+                confidence = float(scores[predicted_digit]) * 100
 
-                for obj in data["objects"]:
-                    path = obj.get("path", [])
-                    points = []
+                col1, col2 = st.columns(2)
+                col1.metric("Predicted Digit", predicted_digit)
+                col2.metric("Model confidence", f"{confidence:.2f}%")
 
-                    for item in path:
-                        if item[0] in ("M", "L"):
-                            points.append((item[1], item[2]))
+                with st.expander("View image sent to the model"):
+                    st.image(processed_image, caption="Processed 28 × 28 image", width=180)
+                    st.caption("Check that the digit is white on a black background and centered.")
 
-                    if len(points) > 1:
-                        pen.line(
-                            points,
-                            fill="white",
-                            width=18,
-                            joint="curve"
-                        )
-
-                predict_digit(drawing)
-
-    except ImportError:
-        st.error(
-            "Drawing support is missing. "
-            "Check requirements.txt for streamlit-drawable-canvas."
-        )
+                with st.expander("Confidence for each digit"):
+                    for digit, score in enumerate(scores):
+                        st.write(f"Digit {digit}: {score * 100:.2f}%")
+                        st.progress(float(score))
+    except Exception as error:
+        st.error(f"Could not process this image: {error}")
 
 st.divider()
-
-st.markdown(
-    "<p style='text-align:center;color:#9ca3af;'>"
-    "Built with Python, TensorFlow and Streamlit"
-    "</p>",
-    unsafe_allow_html=True
-)
+st.caption("Best results: upload one clear, centered handwritten digit, not a full page or multiple digits.")
