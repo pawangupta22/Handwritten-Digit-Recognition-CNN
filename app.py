@@ -200,18 +200,18 @@ with tab2:
     )
 
     
-canvas_result = st_canvas(
-    fill_color="rgba(0, 0, 0, 0)",
-    stroke_width=18,
-    stroke_color="#FFFFFF",
-    background_color="#000000",
-    height=280,
-    width=280,
-    drawing_mode="freedraw",
-    key="draw_digit",
-    update_streamlit=True,
-    return_image_data=True
-)
+    canvas_result = st_canvas(
+        fill_color="rgba(0, 0, 0, 0)",
+        stroke_width=18,
+        stroke_color="#FFFFFF",
+        background_color="#000000",
+        height=280,
+        width=280,
+        drawing_mode="freedraw",
+        key="draw_digit",
+        update_streamlit=True,
+        return_image_data=True
+    )
 
 
     if st.button("Predict Digit", key="draw_predict"):
