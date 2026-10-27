@@ -103,6 +103,26 @@ def prepare_image(image, invert=True):
     return canvas, input_array
 
 
+def show_prediction(input_data, processed_image):
+    scores = model.predict(input_data, verbose=0)[0]
+
+    predicted_digit = int(np.argmax(scores))
+    confidence = float(scores[predicted_digit]) * 100
+
+    col1, col2 = st.columns(2)
+
+    col1.metric("Predicted Digit", predicted_digit)
+    col2.metric("Model Confidence", f"{confidence:.2f}%")
+
+    with st.expander("View processed image"):
+        st.image(processed_image, width=180)
+
+    with st.expander("Confidence for each digit"):
+        for digit, score in enumerate(scores):
+            st.write(f"Digit {digit}: {score * 100:.2f}%")
+            st.progress(float(score))
+
+
 st.markdown(
     "<h1 style='text-align:center;'>Handwritten Digit Recognition</h1>",
     unsafe_allow_html=True
@@ -148,28 +168,19 @@ with tab1:
                 width=250
             )
 
-            if st.button("Recognize Uploaded Digit", type="primary"):
+            if st.button(
+                "Recognize Uploaded Digit",
+                type="primary",
+                key="upload_button"
+            ):
                 processed_image, input_data = prepare_image(original)
 
                 if input_data is None:
-                    st.warning("No digit detected. Please upload a clearer image.")
+                    st.warning(
+                        "No digit detected. Please upload a clearer image."
+                    )
                 else:
-                    scores = model.predict(input_data, verbose=0)[0]
-                    predicted_digit = int(np.argmax(scores))
-                    confidence = float(scores[predicted_digit]) * 100
-
-                    col1, col2 = st.columns(2)
-
-                    col1.metric("Predicted Digit", predicted_digit)
-                    col2.metric("Model Confidence", f"{confidence:.2f}%")
-
-                    with st.expander("View processed image"):
-                        st.image(processed_image, width=180)
-
-                    with st.expander("Confidence for each digit"):
-                        for digit, score in enumerate(scores):
-                            st.write(f"Digit {digit}: {score * 100:.2f}%")
-                            st.progress(float(score))
+                    show_prediction(input_data, processed_image)
 
         except Exception as error:
             st.error(f"Could not process image: {error}")
@@ -177,7 +188,6 @@ with tab1:
 
 with tab2:
     st.subheader("Draw a digit")
-
     st.write("Draw one digit from 0 to 9 in the black box.")
 
     canvas_result = st_canvas(
@@ -191,47 +201,42 @@ with tab2:
         key="draw_digit"
     )
 
-    if st.button("Recognize Drawn Digit", type="primary"):
-        if canvas_result.image_data is None:
-            st.warning("Drawing canvas is not ready. Please try again.")
-        else:
+    if st.button(
+        "Recognize Drawn Digit",
+        type="primary",
+        key="draw_button"
+    ):
+        try:
+            # Access image_data only when the button is clicked.
             drawing = canvas_result.image_data
 
-            if not np.any(drawing[:, :, 3] > 0):
+            if drawing is None:
+                st.warning("Please draw a digit first.")
+            elif not np.any(drawing[:, :, 3] > 0):
                 st.warning("Please draw a digit first.")
             else:
-                try:
-                    gray_image = Image.fromarray(
-                        drawing.astype(np.uint8)
-                    ).convert("L")
+                # Canvas uses white strokes on a black background.
+                gray_image = Image.fromarray(
+                    drawing.astype(np.uint8)
+                ).convert("L")
 
-                    processed_image, input_data = prepare_image(
-                        gray_image,
-                        invert=False
-                    )
+                processed_image, input_data = prepare_image(
+                    gray_image,
+                    invert=False
+                )
 
-                    if input_data is None:
-                        st.warning("Please draw a clearer digit.")
-                    else:
-                        scores = model.predict(input_data, verbose=0)[0]
-                        predicted_digit = int(np.argmax(scores))
-                        confidence = float(scores[predicted_digit]) * 100
+                if input_data is None:
+                    st.warning("Please draw a clearer digit.")
+                else:
+                    show_prediction(input_data, processed_image)
 
-                        col1, col2 = st.columns(2)
-
-                        col1.metric("Predicted Digit", predicted_digit)
-                        col2.metric("Model Confidence", f"{confidence:.2f}%")
-
-                        with st.expander("View processed drawing"):
-                            st.image(processed_image, width=180)
-
-                        with st.expander("Confidence for each digit"):
-                            for digit, score in enumerate(scores):
-                                st.write(f"Digit {digit}: {score * 100:.2f}%")
-                                st.progress(float(score))
-
-                except Exception as error:
-                    st.error(f"Could not recognize drawing: {error}")
+        except RuntimeError:
+            st.warning(
+                "The drawing canvas is not ready. "
+                "Draw a digit and try again."
+            )
+        except Exception as error:
+            st.error(f"Could not recognize drawing: {error}")
 
 
 st.divider()
