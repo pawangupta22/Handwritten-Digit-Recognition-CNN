@@ -5,41 +5,45 @@ from PIL import Image, ImageOps
 from tensorflow import keras
 from streamlit_drawable_canvas import st_canvas
 
+
 st.set_page_config(
     page_title="Handwritten Digit Recognition",
+    page_icon="",
     layout="centered"
 )
+
 
 st.markdown("""
 <style>
 .stApp {
     background-color: #111827;
-    color: #f9fafb;
-}
-.block-container {
-    max-width: 850px;
-    padding-top: 2rem;
-}
-h1, h2, h3 {
-    color: #c4b5fd;
-}
-.stButton button {
-    background-color: #7c3aed;
     color: white;
-    border: none;
+}
+
+h1, h2, h3, p, label {
+    color: white !important;
+}
+
+.stButton > button {
+    background-color: #6C63FF;
+    color: white;
     border-radius: 8px;
-    min-height: 42px;
-    font-weight: 600;
+    border: none;
+    padding: 10px 20px;
+    font-weight: bold;
 }
-.stButton button:hover {
-    background-color: #6d28d9;
+
+.stButton > button:hover {
+    background-color: #5148e5;
     color: white;
 }
-div[data-testid="stMetric"] {
-    background-color: #1f2937;
-    padding: 16px;
-    border-radius: 12px;
+
+[data-testid="stFileUploader"] {
+    background-color: #1F2937;
+    border-radius: 10px;
+    padding: 15px;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -47,6 +51,9 @@ div[data-testid="stMetric"] {
 @st.cache_resource
 def load_model():
     return keras.models.load_model("digit_model.keras")
+
+
+model = load_model()
 
 
 def prepare_image(image, invert=True):
@@ -77,6 +84,7 @@ def prepare_image(image, invert=True):
     ]
 
     h, w = digit.shape
+
     scale = 20 / max(h, w)
 
     new_w = max(1, int(round(w * scale)))
@@ -95,7 +103,8 @@ def prepare_image(image, invert=True):
     canvas.paste(digit_image, (x, y))
 
     input_array = np.asarray(
-        canvas, dtype=np.float32
+        canvas,
+        dtype=np.float32
     ) / 255.0
 
     input_array = input_array.reshape(1, 28, 28, 1)
@@ -104,121 +113,116 @@ def prepare_image(image, invert=True):
 
 
 def show_prediction(input_data, processed_image):
-    scores = model.predict(input_data, verbose=0)[0]
+    predictions = model.predict(input_data, verbose=0)[0]
 
-    predicted_digit = int(np.argmax(scores))
-    confidence = float(scores[predicted_digit]) * 100
+    predicted_digit = int(np.argmax(predictions))
+    confidence = float(predictions[predicted_digit]) * 100
 
-    col1, col2 = st.columns(2)
+    st.success(f"Predicted Digit: {predicted_digit}")
 
-    col1.metric("Predicted Digit", predicted_digit)
-    col2.metric("Model Confidence", f"{confidence:.2f}%")
-
-    with st.expander("View processed image"):
-        st.image(processed_image, width=180)
-
-    with st.expander("Confidence for each digit"):
-        for digit, score in enumerate(scores):
-            st.write(f"Digit {digit}: {score * 100:.2f}%")
-            st.progress(float(score))
-
-
-st.markdown(
-    "<h1 style='text-align:center;'>Handwritten Digit Recognition</h1>",
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    "<p style='text-align:center;color:#9ca3af;'>Recognize handwritten digits from 0 to 9 using a CNN model</p>",
-    unsafe_allow_html=True
-)
-
-st.divider()
-
-try:
-    model = load_model()
-except Exception as error:
-    st.error(
-        "Unable to load digit_model.keras. "
-        "Make sure it is in the same folder as app.py."
+    st.metric(
+        label="Confidence",
+        value=f"{confidence:.2f}%"
     )
-    st.exception(error)
-    st.stop()
+
+    st.subheader("Processed Image")
+
+    st.image(
+        processed_image,
+        width=180,
+        caption="28 × 28 image given to the CNN"
+    )
+
+    st.subheader("Prediction Probabilities")
+
+    chart_data = {
+        "Digit": [str(i) for i in range(10)],
+        "Probability": predictions
+    }
+
+    st.bar_chart(
+        chart_data,
+        x="Digit",
+        y="Probability"
+    )
 
 
-tab1, tab2 = st.tabs(["Upload Image", "Draw Digit"])
+st.title("Handwritten Digit Recognition")
+
+st.write(
+    "Upload an image or draw a digit from 0 to 9. "
+    "The CNN model will predict the digit."
+)
+
+
+tab1, tab2 = st.tabs([
+    "Upload Image",
+    "Draw Digit"
+])
 
 
 with tab1:
-    st.subheader("Upload a handwritten digit")
+    st.subheader("Upload a Handwritten Digit")
 
     uploaded_file = st.file_uploader(
-        "Choose an image containing one digit (0–9)",
-        type=["png", "jpg", "jpeg"],
-        key="upload_digit"
+        "Choose an image",
+        type=["png", "jpg", "jpeg"]
     )
 
     if uploaded_file is not None:
-        try:
-            original = Image.open(uploaded_file)
+        image = Image.open(uploaded_file)
 
-            st.image(
-                original,
-                caption="Uploaded Image",
-                width=250
+        st.image(
+            image,
+            caption="Uploaded Image",
+            width=250
+        )
+
+        if st.button("Predict Digit", key="upload_predict"):
+            processed_image, input_data = prepare_image(
+                image,
+                invert=True
             )
 
-            if st.button(
-                "Recognize Uploaded Digit",
-                type="primary",
-                key="upload_button"
-            ):
-                processed_image, input_data = prepare_image(original)
-
-                if input_data is None:
-                    st.warning(
-                        "No digit detected. Please upload a clearer image."
-                    )
-                else:
-                    show_prediction(input_data, processed_image)
-
-        except Exception as error:
-            st.error(f"Could not process image: {error}")
+            if input_data is None:
+                st.warning(
+                    "No digit detected. Please upload a clear image."
+                )
+            else:
+                show_prediction(input_data, processed_image)
 
 
 with tab2:
-    st.subheader("Draw a digit")
-    st.write("Draw one digit from 0 to 9 in the black box.")
+    st.subheader("Draw a Digit")
+
+    st.write(
+        "Draw one digit using your mouse or touch screen."
+    )
 
     canvas_result = st_canvas(
-        fill_color="rgba(255, 255, 255, 0)",
+        fill_color="rgba(0, 0, 0, 0)",
         stroke_width=18,
         stroke_color="#FFFFFF",
         background_color="#000000",
         height=280,
         width=280,
         drawing_mode="freedraw",
-        key="draw_digit"
+        key="draw_digit",
+        update_streamlit=True
     )
 
-    if st.button(
-        "Recognize Drawn Digit",
-        type="primary",
-        key="draw_button"
-    ):
+    if st.button("Predict Digit", key="draw_predict"):
         try:
-            # Access image_data only when the button is clicked.
             drawing = canvas_result.image_data
 
             if drawing is None:
-                st.warning("Please draw a digit first.")
-            elif not np.any(drawing[:, :, 3] > 0):
-                st.warning("Please draw a digit first.")
+                st.warning(
+                    "Draw a digit on the canvas first."
+                )
             else:
-                # Canvas uses white strokes on a black background.
-                gray_image = Image.fromarray(
-                    drawing.astype(np.uint8)
-                ).convert("L")
+                rgb = drawing[:, :, :3].astype(np.uint8)
+
+                gray_image = Image.fromarray(rgb).convert("L")
 
                 processed_image, input_data = prepare_image(
                     gray_image,
@@ -226,21 +230,14 @@ with tab2:
                 )
 
                 if input_data is None:
-                    st.warning("Please draw a clearer digit.")
+                    st.warning(
+                        "Please draw a digit first."
+                    )
                 else:
-                    show_prediction(input_data, processed_image)
+                    show_prediction(
+                        input_data,
+                        processed_image
+                    )
 
-        except RuntimeError:
-            st.warning(
-                "The drawing canvas is not ready. "
-                "Draw a digit and try again."
-            )
-        except Exception as error:
-            st.error(f"Could not recognize drawing: {error}")
-
-
-st.divider()
-
-st.caption(
-    "For best results, upload or draw one clear digit at a time."
-)
+        except Exception as e:
+            st.error(f"Canvas error: {e}")
