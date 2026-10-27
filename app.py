@@ -1,7 +1,7 @@
 
 import streamlit as st
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageDraw
 from tensorflow import keras
 
 st.set_page_config(
@@ -16,29 +16,18 @@ st.markdown("""
     background-color: #111827;
     color: #f9fafb;
 }
-
 .block-container {
     max-width: 1000px;
     padding-top: 2rem;
 }
-
 h1, h2, h3 {
     color: #c4b5fd;
 }
-
 .subtitle {
     color: #9ca3af;
     text-align: center;
     font-size: 17px;
 }
-
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    background-color: #1f2937;
-    border: 1px solid #374151;
-    border-radius: 14px;
-    padding: 18px;
-}
-
 .stButton button {
     background-color: #7c3aed;
     color: white;
@@ -48,18 +37,15 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     min-height: 42px;
     font-weight: 600;
 }
-
 .stButton button:hover {
     background-color: #6d28d9;
     color: white;
 }
-
 div[data-testid="stMetric"] {
     background-color: #1f2937;
     padding: 18px;
     border-radius: 12px;
 }
-
 hr {
     border-color: #374151;
 }
@@ -110,7 +96,7 @@ def predict_digit(image):
     processed = prepare_image(image)
 
     if processed is None:
-        st.warning("No digit detected. Please try another image.")
+        st.warning("No digit detected. Please try again.")
         return
 
     model = load_model()
@@ -122,7 +108,6 @@ def predict_digit(image):
     st.markdown("### Prediction Result")
 
     col1, col2 = st.columns(2)
-
     col1.metric("Predicted Digit", digit)
     col2.metric("Confidence", f"{confidence:.2f}%")
 
@@ -150,11 +135,13 @@ try:
 except Exception:
     st.error(
         "Unable to load digit_model.keras. "
-        "Make sure the model file is uploaded to your GitHub repository."
+        "Check that the model file is uploaded."
     )
     st.stop()
 
+
 upload_tab, draw_tab = st.tabs(["Upload Image", "Draw Digit"])
+
 
 with upload_tab:
     st.subheader("Upload a handwritten digit")
@@ -170,6 +157,7 @@ with upload_tab:
 
         if st.button("Recognize Digit", key="upload_button"):
             predict_digit(image)
+
 
 with draw_tab:
     st.subheader("Draw a digit")
@@ -188,23 +176,36 @@ with draw_tab:
         )
 
         if st.button("Recognize Digit", key="draw_button"):
-            try:
-                if canvas.image_data is None:
-                    st.warning("Please draw a digit first.")
-                else:
-                    image = Image.fromarray(
-                        canvas.image_data.astype("uint8")
-                    ).convert("RGB")
+            data = canvas.json_data
 
-                    predict_digit(image)
+            if data is None or not data.get("objects"):
+                st.warning("Please draw a digit first.")
+            else:
+                drawing = Image.new("RGB", (280, 280), "black")
+                pen = ImageDraw.Draw(drawing)
 
-            except RuntimeError:
-                st.warning("Please draw a digit and try again.")
+                for obj in data["objects"]:
+                    path = obj.get("path", [])
+                    points = []
+
+                    for item in path:
+                        if item[0] in ("M", "L"):
+                            points.append((item[1], item[2]))
+
+                    if len(points) > 1:
+                        pen.line(
+                            points,
+                            fill="white",
+                            width=18,
+                            joint="curve"
+                        )
+
+                predict_digit(drawing)
 
     except ImportError:
         st.error(
             "Drawing support is missing. "
-            "Add streamlit-drawable-canvas to requirements.txt."
+            "Check requirements.txt for streamlit-drawable-canvas."
         )
 
 st.divider()
