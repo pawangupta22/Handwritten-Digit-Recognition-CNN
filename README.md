@@ -128,6 +128,3 @@ This project successfully demonstrates the application of Convolutional Neural N
 
 The project provides practical knowledge of deep learning, image preprocessing, CNN architecture, model training, and image classification.
 
----
-
-**Academic Deep Learning Project | B.Tech CSE | Semester V | 2026**
